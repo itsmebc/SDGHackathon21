@@ -1,0 +1,164 @@
+---
+title: "SDG Hackathon 2021"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(showtext)
+library(patchwork)
+library(here)
+
+font_add_google("Spectral", "spectral")
+font_add_google("Rosario", "rosario")
+showtext_auto()
+
+options(scipen = 999)
+```
+
+```{r}
+main_df <- read_csv("sdg_hackathon_data.zip")
+additional_df <- read_csv("supplementary_data.zip")
+
+#join on main dataset
+main_df <- main_df %>% 
+  left_join(additional_df)
+```
+
+```{r}
+#cleaning
+
+main_df = main_df %>%
+  mutate(across(.cols = start_date:end_date, .fns = lubridate::ymd)),
+         approved_amount = as.numeric(approved_amount))
+
+unique = main_df %>%
+  select(-c(sdg, system, hits)) %>%
+  distinct()
+
+keywords = unique$keywords %>%
+  strsplit(., "\\; ") %>%
+  unlist() %>% 
+  toupper() %>%
+  tibble() %>%
+  filter(!is.na(.))
+
+keywordsFreq = table(test$.) %>%
+  as.data.frame() %>%
+  arrange(desc(Freq))
+```
+
+
+```{r}
+#2. Analyze which SDG gets the most funding?
+
+sdg_funding = main_df %>%
+  select(-c(system, hits)) %>%
+  group_by(project_number) %>%
+  distinct() %>%
+  ungroup() %>%
+  group_by(sdg) %>%
+  summarize(n = sum(approved_amount, na.rm = TRUE))%>%
+  mutate(sdg = fct_reorder(sdg, n))
+
+ggplot(data = sdg_funding, aes(x=sdg, y=n))+
+  geom_col()+
+  coord_flip()
+
+sdg_funding_years = main_df %>%
+  select(-c(system, hits)) %>%
+  group_by(project_number) %>%
+  distinct() %>%
+  ungroup() %>%
+  group_by(year(start_date), sdg) %>%
+  summarize(n = sum(approved_amount, na.rm=TRUE)) %>%
+  filter(!`year(start_date)` %in% c('2022','2021'),
+         !is.na(sdg))
+
+sdg_years = sdg_funding_years %>%
+  group_by(`year(start_date)`) %>%
+  summarise(total = sum(n))
+
+sdg_sdgyears = sdg_funding_years %>%
+  group_by(`year(start_date)`, sdg) %>%
+  summarise(total = sum(n))
+
+
+ggplot(sdg_funding_years, aes(x=`year(start_date)`, y=n, group=sdg)) +
+  geom_point()+
+  geom_line()+
+  facet_wrap(~sdg)+
+  theme(
+    legend.position = "none"
+  )
+```
+
+```{r}
+#plotting, line and SDG densities
+
+ggplot(NULL, aes(x,y))+
+    geom_line(data=sdg_years, aes(x=`year(start_date)`, y=total, size=5))+
+    geom_area(data=sdg_sdgyears, aes(x=`year(start_date)`, y=total, fill=sdg), alpha=.5)
+```
+
+
+```{r}
+#plotting, lollipop
+
+ggplot(sdg_years, aes(`year(start_date)`,total))+
+  geom_segment(aes(x=`year(start_date)`, xend=`year(start_date)`,y=0, yend=total))+
+  geom_point(size=4, color="#49893F", fill=alpha("#8DE27F", 0.70),alpha=1, shape=21, stroke=1)+
+  xlim(1997,2022)+
+  annotate("text", x=2007, y=1100000000, label="ONE BILLION")+
+  annotate("text", x=2007, y=4100000000, label="FOUR BILLION")+
+  annotate("text", x=2007, y=6100000000, label="SIX BILLION")+
+  theme(
+    panel.background = element_rect(fill='#bbc6c9'),
+    plot.background = element_rect(fill='#bbc6c9'),
+    axis.text.y = element_blank(),
+    axis.title.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.ticks = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank()
+  )
+```
+
+
+```{r}
+keywordsFreq %>%
+  slice(1:25) %>%
+  ggplot(aes(x=Var1, y=Freq, color=Var1))+
+  geom_col()+
+  ylim(-50,600)+
+  geom_hline(yintercept=100, linetype = "solid", color = "#b3a160", size=.7)+
+  geom_hline(yintercept=300, linetype = "solid", color = "#60b383", size=.7)+
+  geom_hline(yintercept=500, linetype = "solid", color = "#b360a9", size=.7)+
+  # annotate("text", y=530, x=3, label="500")+
+  # annotate("text", y=330, x=3, label="300")+
+  theme(
+    legend.position = "none",
+    panel.background = element_rect(fill="white"),
+    plot.background = element_blank(),
+    axis.line.x = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    panel.grid.major.x = element_line(color="gray", size=0.2),
+    panel.grid.minor.y = element_blank(),
+    axis.text.x = element_text(family="rosario", size=23, color="black"),
+  )+
+  coord_polar(clip="off")
+```
+
+```{r}
+ggsave(paste0("SDG Hackathon3_", format(Sys.time(), "%d%m%Y"), ".png"),
+       width = 7, height = 6, units = "in")
+```
+
+
+
+
